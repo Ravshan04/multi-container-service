@@ -25,7 +25,10 @@ release_version="${release_version:-local}"
 
 slot_value() {
   local key="$1"
-  [[ -f "$SLOT_FILE" ]] && awk -F= -v key="$key" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$SLOT_FILE"
+  if [[ -f "$SLOT_FILE" ]]; then
+    awk -F= -v key="$key" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$SLOT_FILE"
+  fi
+  return 0
 }
 
 blue_image="$(slot_value BLUE_IMAGE)"
