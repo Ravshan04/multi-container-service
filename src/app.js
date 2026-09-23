@@ -17,7 +17,10 @@ export function createApp() {
 
   app.get("/health", (_request, response) => {
     const connected = mongoose.connection.readyState === 1;
-    response.status(connected ? 200 : 503).json({ status: connected ? "ok" : "unavailable" });
+    response.status(connected ? 200 : 503).json({
+      status: connected ? "ok" : "unavailable",
+      version: process.env.APP_VERSION ?? "local",
+    });
   });
 
   app.get("/todos", async (_request, response, next) => {
@@ -84,4 +87,3 @@ export function createApp() {
 
   return app;
 }
-

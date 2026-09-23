@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: production-deployment
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   IMAGE_NAME: ghcr.io/ravshan04/multi-container-service
@@ -70,34 +70,50 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-      - name: Upload Compose configuration
+      - name: Upload deployment configuration
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "${SSH_USER}@${SERVER_HOST}" \
-            "sudo mkdir -p /opt/multi-container-service/nginx && sudo chown -R '${SSH_USER}:${SSH_USER}' /opt/multi-container-service"
+            "sudo mkdir -p /opt/multi-container-service/nginx /opt/multi-container-service/monitoring /opt/multi-container-service/scripts /opt/multi-container-service/state && sudo chown -R '${SSH_USER}:${SSH_USER}' /opt/multi-container-service"
           scp -i ~/.ssh/deploy_key docker-compose.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/"
-          scp -i ~/.ssh/deploy_key nginx/default.conf "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/nginx/"
+          scp -i ~/.ssh/deploy_key nginx/default.conf.template "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/nginx/"
+          scp -i ~/.ssh/deploy_key monitoring/blackbox.yml monitoring/prometheus.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/"
+          scp -i ~/.ssh/deploy_key scripts/deploy-blue-green.sh "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/scripts/"
 
-      - name: Deploy Compose stack
+      - name: Configure deployment environment
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          API_IMAGE: ${{ needs.build-and-push.outputs.image }}
+          APP_VERSION: ${{ github.sha }}
+          MONGO_ROOT_USERNAME: ${{ secrets.MONGO_ROOT_USERNAME }}
+          MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
+        run: |
+          umask 077
+          {
+            printf 'API_IMAGE=%s\n' "$API_IMAGE"
+            printf 'APP_VERSION=%s\n' "$APP_VERSION"
+            printf 'MONGO_ROOT_USERNAME=%s\n' "$MONGO_ROOT_USERNAME"
+            printf 'MONGO_ROOT_PASSWORD=%s\n' "$MONGO_ROOT_PASSWORD"
+          } > deploy.env
+          scp -i ~/.ssh/deploy_key deploy.env "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/.env"
+          rm -f deploy.env
+          ssh -i ~/.ssh/deploy_key "${SSH_USER}@${SERVER_HOST}" "chmod 600 /opt/multi-container-service/.env"
+
+      - name: Deploy blue-green stack
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          API_IMAGE: ${{ needs.build-and-push.outputs.image }}
-          MONGO_ROOT_USERNAME: ${{ secrets.MONGO_ROOT_USERNAME }}
-          MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
         run: |
           ssh -i ~/.ssh/deploy_key "${SSH_USER}@${SERVER_HOST}" \
-            "printf '%s' '$GHCR_TOKEN' | sudo timeout 30s docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+            "sudo timeout 30s docker login ghcr.io -u '${{ github.actor }}' --password-stdin" <<< "$GHCR_TOKEN"
           ssh -i ~/.ssh/deploy_key "${SSH_USER}@${SERVER_HOST}" \
-            "sudo systemctl disable --now nginx 2>/dev/null || true; \
-            cd /opt/multi-container-service && printf '%s\n' \
-            'API_IMAGE=$API_IMAGE' \
-            'MONGO_ROOT_USERNAME=$MONGO_ROOT_USERNAME' \
-            'MONGO_ROOT_PASSWORD=$MONGO_ROOT_PASSWORD' > .env && \
-            sudo docker compose pull && sudo docker compose up -d --remove-orphans"
+            "sudo systemctl disable --now nginx 2>/dev/null || true"
+          ssh -i ~/.ssh/deploy_key "${SSH_USER}@${SERVER_HOST}" \
+            "cd /opt/multi-container-service && bash scripts/deploy-blue-green.sh"
 
       - name: Verify API
         env:

@@ -1,13 +1,16 @@
-# Multi-Container Service
+# Blue-Green Deployment for a Multi-Container Service
 
-Project page: [Multi-Container Application](https://roadmap.sh/projects/multi-container-service)
+Project page: [Blue-Green Deployment](https://roadmap.sh/projects/blue-green-deployment)
 
-Solution repository: https://github.com/Ravshan04/multi-container-service
+Base application: [Multi-Container Service](https://roadmap.sh/projects/multi-container-service)
 
 Live API: http://3.250.91.5/todos
 
-Production-style Todo API running as a Docker Compose stack with Node.js,
-MongoDB, and an Nginx reverse proxy.
+Todo API running as a Docker Compose stack with Node.js, MongoDB, and Nginx.
+Nginx routes traffic to one of two API containers (`api-blue` or `api-green`).
+The inactive slot starts first and must pass its container health check before
+Nginx switches traffic. A failed post-switch health check restores the previous
+route and leaves the old API container running.
 
 ## API
 
@@ -22,28 +25,38 @@ MongoDB, and an Nginx reverse proxy.
 
 Example body: `{ "title": "Learn Docker Compose", "completed": false }`.
 
-## Run locally
+## Deploy locally
 
 ```sh
 cp .env.example .env
-docker compose up --build -d
+bash scripts/deploy-blue-green.sh
+curl http://localhost/health
 curl http://localhost/todos
-curl -X POST http://localhost/todos \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Learn Docker Compose"}'
-docker compose down
 ```
 
-The named `mongo_data` volume preserves todos across container restarts and
-`docker compose down`. Use `docker compose down -v` only to delete the data.
+Run `bash scripts/deploy-blue-green.sh` again to deploy to the other color. The
+script waits for MongoDB and the candidate API to become healthy, switches
+Nginx, checks the public health route, then stops the previously active API.
+It stores the active color in `state/active-color` so future deployments and
+host restarts preserve the correct slot. Both API containers use the same
+MongoDB database and the named `mongo_data` volume, preserving todos across
+deployments and container restarts.
+
+Use `docker compose down` to stop the stack. Use `docker compose down -v` only
+to delete the application data and monitoring history.
 
 ## Infrastructure and deployment
 
 - `terraform/` provisions an Ubuntu EC2 instance with HTTP and SSH access.
 - `ansible/configure.yml` installs Docker and Compose and prepares the host.
 - GitHub Actions tests the app, pushes the image to GHCR, uploads the Compose
-  configuration, runs `docker compose up -d`, and verifies the API.
-- Nginx runs inside Compose and exposes the API on public port 80.
+  configuration, deploys to the inactive color, and verifies the API.
+- Prometheus and Blackbox Exporter probe the proxied `/health` endpoint every
+  15 seconds and retain 15 days of probe history. Prometheus listens on the
+  server's loopback interface at port 9090; use an SSH tunnel to open its UI:
+  `ssh -L 9090:127.0.0.1:9090 <user>@<server>` then visit
+  `http://localhost:9090`.
+- Nginx is the public traffic switch and exposes the API on port 80.
 
 Required GitHub secrets: `SERVER_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`,
 `MONGO_ROOT_USERNAME`, and `MONGO_ROOT_PASSWORD`.
