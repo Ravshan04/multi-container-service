@@ -4,7 +4,7 @@ Project page: [Multi-Container Application](https://roadmap.sh/projects/multi-co
 
 Solution repository: https://github.com/Ravshan04/multi-container-service
 
-Live API: http://54.194.155.56/todos
+Live API: http://3.250.91.5/todos
 
 Production-style Todo API running as a Docker Compose stack with Node.js,
 MongoDB, and an Nginx reverse proxy.
