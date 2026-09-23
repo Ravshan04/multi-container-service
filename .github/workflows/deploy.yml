@@ -73,21 +73,24 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
 
       - name: Upload deployment configuration
+        timeout-minutes: 3
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "${SSH_USER}@${SERVER_HOST}" \
-            "sudo mkdir -p /opt/multi-container-service/nginx /opt/multi-container-service/monitoring/grafana/provisioning/datasources /opt/multi-container-service/monitoring/grafana/provisioning/dashboards /opt/multi-container-service/monitoring/grafana/dashboards /opt/multi-container-service/scripts /opt/multi-container-service/state && sudo chown -R '${SSH_USER}:${SSH_USER}' /opt/multi-container-service"
-          scp -i ~/.ssh/deploy_key docker-compose.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/"
-          scp -i ~/.ssh/deploy_key nginx/default.conf.template "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/nginx/"
-          scp -i ~/.ssh/deploy_key monitoring/blackbox.yml monitoring/prometheus.yml monitoring/alerts.yml monitoring/recording-rules.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/"
-          scp -i ~/.ssh/deploy_key monitoring/grafana/provisioning/datasources/prometheus.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/grafana/provisioning/datasources/"
-          scp -i ~/.ssh/deploy_key monitoring/grafana/provisioning/dashboards/dashboards.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/grafana/provisioning/dashboards/"
-          scp -i ~/.ssh/deploy_key monitoring/grafana/dashboards/todo-service.json "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/grafana/dashboards/"
-          scp -i ~/.ssh/deploy_key scripts/deploy-blue-green.sh "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/scripts/"
+          SSH_OPTS='-o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3'
+          timeout 60s ssh -i ~/.ssh/deploy_key $SSH_OPTS -o StrictHostKeyChecking=accept-new "${SSH_USER}@${SERVER_HOST}" \
+            "sudo mkdir -p /opt/multi-container-service/nginx /opt/multi-container-service/monitoring/grafana/provisioning/datasources /opt/multi-container-service/monitoring/grafana/provisioning/dashboards /opt/multi-container-service/monitoring/grafana/dashboards /opt/multi-container-service/scripts /opt/multi-container-service/state && sudo chown '${SSH_USER}:${SSH_USER}' /opt/multi-container-service && sudo chown -R '${SSH_USER}:${SSH_USER}' /opt/multi-container-service/nginx /opt/multi-container-service/monitoring /opt/multi-container-service/scripts /opt/multi-container-service/state"
+          scp -i ~/.ssh/deploy_key $SSH_OPTS docker-compose.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/"
+          scp -i ~/.ssh/deploy_key $SSH_OPTS nginx/default.conf.template "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/nginx/"
+          scp -i ~/.ssh/deploy_key $SSH_OPTS monitoring/blackbox.yml monitoring/prometheus.yml monitoring/alerts.yml monitoring/recording-rules.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/"
+          scp -i ~/.ssh/deploy_key $SSH_OPTS monitoring/grafana/provisioning/datasources/prometheus.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/grafana/provisioning/datasources/"
+          scp -i ~/.ssh/deploy_key $SSH_OPTS monitoring/grafana/provisioning/dashboards/dashboards.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/grafana/provisioning/dashboards/"
+          scp -i ~/.ssh/deploy_key $SSH_OPTS monitoring/grafana/dashboards/todo-service.json "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/grafana/dashboards/"
+          scp -i ~/.ssh/deploy_key $SSH_OPTS scripts/deploy-blue-green.sh "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/scripts/"
 
       - name: Configure deployment environment
+        timeout-minutes: 2
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
@@ -98,6 +101,7 @@ jobs:
           GRAFANA_ADMIN_USER: admin
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: |
+          SSH_OPTS='-o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3'
           umask 077
           {
             printf 'API_IMAGE=%s\n' "$API_IMAGE"
@@ -107,29 +111,33 @@ jobs:
             printf 'GRAFANA_ADMIN_USER=%s\n' "$GRAFANA_ADMIN_USER"
             printf 'GRAFANA_ADMIN_PASSWORD=%s\n' "$GRAFANA_ADMIN_PASSWORD"
           } > deploy.env
-          scp -i ~/.ssh/deploy_key deploy.env "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/.env"
+          timeout 60s scp -i ~/.ssh/deploy_key $SSH_OPTS deploy.env "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/.env"
           rm -f deploy.env
-          ssh -i ~/.ssh/deploy_key "${SSH_USER}@${SERVER_HOST}" "chmod 600 /opt/multi-container-service/.env"
+          timeout 60s ssh -i ~/.ssh/deploy_key $SSH_OPTS "${SSH_USER}@${SERVER_HOST}" "chmod 600 /opt/multi-container-service/.env"
 
       - name: Deploy blue-green stack
+        timeout-minutes: 8
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ssh -i ~/.ssh/deploy_key "${SSH_USER}@${SERVER_HOST}" \
+          SSH_OPTS='-o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3'
+          timeout 60s ssh -i ~/.ssh/deploy_key $SSH_OPTS "${SSH_USER}@${SERVER_HOST}" \
             "sudo timeout 30s docker login ghcr.io -u '${{ github.actor }}' --password-stdin" <<< "$GHCR_TOKEN"
-          ssh -i ~/.ssh/deploy_key "${SSH_USER}@${SERVER_HOST}" \
+          timeout 60s ssh -i ~/.ssh/deploy_key $SSH_OPTS "${SSH_USER}@${SERVER_HOST}" \
             "sudo systemctl disable --now nginx 2>/dev/null || true"
-          ssh -i ~/.ssh/deploy_key "${SSH_USER}@${SERVER_HOST}" \
+          timeout 6m ssh -i ~/.ssh/deploy_key $SSH_OPTS "${SSH_USER}@${SERVER_HOST}" \
             "cd /opt/multi-container-service && bash scripts/deploy-blue-green.sh"
 
       - name: Verify API
+        timeout-minutes: 3
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
+          SSH_OPTS='-o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3'
           curl --fail --retry 15 --retry-delay 4 "http://${SERVER_HOST}/health"
           curl --fail "http://${SERVER_HOST}/todos"
-          ssh -i ~/.ssh/deploy_key "${SSH_USER}@${SERVER_HOST}" \
+          timeout 60s ssh -i ~/.ssh/deploy_key $SSH_OPTS "${SSH_USER}@${SERVER_HOST}" \
             "curl --fail --silent http://127.0.0.1:19090/-/ready && curl --fail --silent http://127.0.0.1:13001/api/health"
