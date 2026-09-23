@@ -40,4 +40,4 @@ if (process.env.TEST_PERSISTENCE === "true") {
 const removed = await request(`/todos/${id}`, { method: "DELETE" });
 assert.equal(removed.response.status, 204);
 
-console.log("CRUD and persistence checks passed");
+console.log(process.env.TEST_PERSISTENCE === "true" ? "CRUD and persistence checks passed" : "CRUD checks passed");
