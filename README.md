@@ -60,14 +60,14 @@ to delete the application data and monitoring history.
   history.
 - Grafana provisions Prometheus as a data source and loads the Todo Service
   dashboard for API request rate, p95 latency, health, CPU, and memory.
-- Prometheus and Grafana bind to loopback ports 9090 and 3001. Access them over
+- Prometheus and Grafana bind to loopback ports 19090 and 13001. Access them over
   SSH tunnels:
 
   ```sh
-  ssh -L 9090:127.0.0.1:9090 -L 3001:127.0.0.1:3001 <user>@<server>
+  ssh -L 19090:127.0.0.1:19090 -L 13001:127.0.0.1:13001 <user>@<server>
   ```
 
-  Then open `http://localhost:9090` or `http://localhost:3001`. Grafana requires
+  Then open `http://localhost:19090` or `http://localhost:13001`. Grafana requires
   the credentials configured by `GRAFANA_ADMIN_USER` and
   `GRAFANA_ADMIN_PASSWORD`. Anonymous access and sign-up are disabled.
 - Nginx is the public traffic switch and exposes the API on port 80.
