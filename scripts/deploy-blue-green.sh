@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+trap 'exit_code=$?; printf "Deployment failed at line %s: %s (exit %s)\n" "$LINENO" "$BASH_COMMAND" "$exit_code" >&2; exit "$exit_code"' ERR
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
