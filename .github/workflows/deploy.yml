@@ -127,6 +127,9 @@ jobs:
       - name: Verify API
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
         run: |
           curl --fail --retry 15 --retry-delay 4 "http://${SERVER_HOST}/health"
           curl --fail "http://${SERVER_HOST}/todos"
+          ssh -i ~/.ssh/deploy_key "${SSH_USER}@${SERVER_HOST}" \
+            "curl --fail --silent http://127.0.0.1:19090/-/ready && curl --fail --silent http://127.0.0.1:13001/api/health"
