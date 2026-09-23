@@ -1,5 +1,29 @@
 import express from "express";
 import mongoose from "mongoose";
+import promClient from "prom-client";
+
+const registry = new promClient.Registry();
+promClient.collectDefaultMetrics({ register: registry, prefix: "todo_api_" });
+const httpRequests = new promClient.Counter({
+  name: "todo_api_http_requests_total",
+  help: "Total HTTP requests handled by the Todo API.",
+  labelNames: ["method", "route", "status_code"],
+  registers: [registry],
+});
+const httpDuration = new promClient.Histogram({
+  name: "todo_api_http_request_duration_seconds",
+  help: "HTTP request duration in seconds.",
+  labelNames: ["method", "route", "status_code"],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+  registers: [registry],
+});
+const applicationInfo = new promClient.Gauge({
+  name: "todo_api_info",
+  help: "Build metadata for the API receiving traffic.",
+  labelNames: ["version"],
+  registers: [registry],
+});
+applicationInfo.set({ version: process.env.APP_VERSION ?? "local" }, 1);
 
 const todoSchema = new mongoose.Schema(
   {
@@ -14,6 +38,25 @@ export const Todo = mongoose.model("Todo", todoSchema);
 export function createApp() {
   const app = express();
   app.use(express.json({ limit: "16kb" }));
+
+  app.use((request, response, next) => {
+    const end = httpDuration.startTimer();
+    response.on("finish", () => {
+      const labels = {
+        method: request.method,
+        route: request.route?.path ? `${request.baseUrl}${request.route.path}` : (request.path === "/health" ? "/health" : "unmatched"),
+        status_code: String(response.statusCode),
+      };
+      httpRequests.inc(labels);
+      end(labels);
+    });
+    next();
+  });
+
+  app.get("/metrics", async (_request, response) => {
+    response.set("Content-Type", registry.contentType);
+    response.end(await registry.metrics());
+  });
 
   app.get("/health", (_request, response) => {
     const connected = mongoose.connection.readyState === 1;

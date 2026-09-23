@@ -108,11 +108,11 @@ wait_proxy() {
   return 1
 }
 
-compose pull mongo nginx blackbox prometheus
+compose pull mongo nginx blackbox node-exporter mongodb-exporter prometheus grafana
 if [[ -n "$(sed -n 's/^API_IMAGE=//p' .env | tail -n 1)" ]]; then
   compose pull "api-$target"
 fi
-compose up -d mongo blackbox prometheus
+compose up -d mongo blackbox node-exporter mongodb-exporter prometheus grafana
 wait_healthy mongo
 
 if [[ -n "$current" ]]; then

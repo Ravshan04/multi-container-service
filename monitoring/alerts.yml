@@ -1,0 +1,44 @@
+groups:
+  - name: application-alerts
+    rules:
+      - alert: ApplicationHealthCheckFailing
+        expr: probe_success{job="application"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Todo API health check is failing
+          description: The public health endpoint has failed for at least two minutes.
+
+      - alert: ApplicationMetricsUnavailable
+        expr: up{job="application-metrics"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Application metrics endpoint is unavailable
+          description: Prometheus cannot scrape the active API's /metrics endpoint.
+
+      - alert: HostDiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) < 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Host root filesystem has less than 10% free space
+
+      - alert: HostMemoryLow
+        expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Host has less than 10% memory available
+
+      - alert: MongoDBExporterUnavailable
+        expr: up{job="mongodb"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Prometheus cannot scrape MongoDB metrics

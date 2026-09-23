@@ -2,6 +2,8 @@
 
 Project page: [Blue-Green Deployment](https://roadmap.sh/projects/blue-green-deployment)
 
+Monitoring project: [Prometheus and Grafana](https://roadmap.sh/projects/monitoring)
+
 Base application: [Multi-Container Service](https://roadmap.sh/projects/multi-container-service)
 
 Live API: http://3.250.91.5/todos
@@ -51,12 +53,28 @@ to delete the application data and monitoring history.
 - `ansible/configure.yml` installs Docker and Compose and prepares the host.
 - GitHub Actions tests the app, pushes the image to GHCR, uploads the Compose
   configuration, deploys to the inactive color, and verifies the API.
-- Prometheus and Blackbox Exporter probe the proxied `/health` endpoint every
-  15 seconds and retain 15 days of probe history. Prometheus listens on the
-  server's loopback interface at port 9090; use an SSH tunnel to open its UI:
-  `ssh -L 9090:127.0.0.1:9090 <user>@<server>` then visit
-  `http://localhost:9090`.
+- Prometheus scrapes custom API request and latency metrics through the active
+  Nginx route, probes `/health` with Blackbox Exporter, collects host metrics
+  with Node Exporter, and collects MongoDB metrics with the MongoDB exporter.
+  It evaluates application, host, and database alerts and retains 15 days of
+  history.
+- Grafana provisions Prometheus as a data source and loads the Todo Service
+  dashboard for API request rate, p95 latency, health, CPU, and memory.
+- Prometheus and Grafana bind to loopback ports 9090 and 3001. Access them over
+  SSH tunnels:
+
+  ```sh
+  ssh -L 9090:127.0.0.1:9090 -L 3001:127.0.0.1:3001 <user>@<server>
+  ```
+
+  Then open `http://localhost:9090` or `http://localhost:3001`. Grafana requires
+  the credentials configured by `GRAFANA_ADMIN_USER` and
+  `GRAFANA_ADMIN_PASSWORD`. Anonymous access and sign-up are disabled.
 - Nginx is the public traffic switch and exposes the API on port 80.
 
 Required GitHub secrets: `SERVER_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`,
-`MONGO_ROOT_USERNAME`, and `MONGO_ROOT_PASSWORD`.
+`MONGO_ROOT_USERNAME`, `MONGO_ROOT_PASSWORD`, and `GRAFANA_ADMIN_PASSWORD`.
+
+For local setup, copy `.env.example` to `.env`, set unique database and Grafana
+passwords, and run `bash scripts/deploy-blue-green.sh`. The same script starts
+Prometheus, Grafana, and all exporters on the first deployment.

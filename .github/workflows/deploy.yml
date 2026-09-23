@@ -19,6 +19,8 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -76,10 +78,13 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "${SSH_USER}@${SERVER_HOST}" \
-            "sudo mkdir -p /opt/multi-container-service/nginx /opt/multi-container-service/monitoring /opt/multi-container-service/scripts /opt/multi-container-service/state && sudo chown -R '${SSH_USER}:${SSH_USER}' /opt/multi-container-service"
+            "sudo mkdir -p /opt/multi-container-service/nginx /opt/multi-container-service/monitoring/grafana/provisioning/datasources /opt/multi-container-service/monitoring/grafana/provisioning/dashboards /opt/multi-container-service/monitoring/grafana/dashboards /opt/multi-container-service/scripts /opt/multi-container-service/state && sudo chown -R '${SSH_USER}:${SSH_USER}' /opt/multi-container-service"
           scp -i ~/.ssh/deploy_key docker-compose.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/"
           scp -i ~/.ssh/deploy_key nginx/default.conf.template "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/nginx/"
-          scp -i ~/.ssh/deploy_key monitoring/blackbox.yml monitoring/prometheus.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/"
+          scp -i ~/.ssh/deploy_key monitoring/blackbox.yml monitoring/prometheus.yml monitoring/alerts.yml monitoring/recording-rules.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/"
+          scp -i ~/.ssh/deploy_key monitoring/grafana/provisioning/datasources/prometheus.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/grafana/provisioning/datasources/"
+          scp -i ~/.ssh/deploy_key monitoring/grafana/provisioning/dashboards/dashboards.yml "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/grafana/provisioning/dashboards/"
+          scp -i ~/.ssh/deploy_key monitoring/grafana/dashboards/todo-service.json "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/monitoring/grafana/dashboards/"
           scp -i ~/.ssh/deploy_key scripts/deploy-blue-green.sh "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/scripts/"
 
       - name: Configure deployment environment
@@ -90,6 +95,8 @@ jobs:
           APP_VERSION: ${{ github.sha }}
           MONGO_ROOT_USERNAME: ${{ secrets.MONGO_ROOT_USERNAME }}
           MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
+          GRAFANA_ADMIN_USER: admin
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: |
           umask 077
           {
@@ -97,6 +104,8 @@ jobs:
             printf 'APP_VERSION=%s\n' "$APP_VERSION"
             printf 'MONGO_ROOT_USERNAME=%s\n' "$MONGO_ROOT_USERNAME"
             printf 'MONGO_ROOT_PASSWORD=%s\n' "$MONGO_ROOT_PASSWORD"
+            printf 'GRAFANA_ADMIN_USER=%s\n' "$GRAFANA_ADMIN_USER"
+            printf 'GRAFANA_ADMIN_PASSWORD=%s\n' "$GRAFANA_ADMIN_PASSWORD"
           } > deploy.env
           scp -i ~/.ssh/deploy_key deploy.env "${SSH_USER}@${SERVER_HOST}:/opt/multi-container-service/.env"
           rm -f deploy.env
