@@ -1,0 +1,31 @@
+---
+- name: Configure multi-container application server
+  hosts: app_servers
+  become: true
+  tasks:
+    - name: Install Docker and Compose
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-v2
+        state: present
+        update_cache: true
+
+    - name: Enable Docker
+      ansible.builtin.systemd_service:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Create application directory
+      ansible.builtin.file:
+        path: /opt/multi-container-service/nginx
+        state: directory
+        mode: "0755"
+
+    - name: Add deployment user to Docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+
